@@ -1,7 +1,9 @@
+import contextlib
 import copy
 import heapq
 import inspect
 import logging
+import os
 import sys
 import threading
 import time
@@ -47,6 +49,35 @@ from comfy_execution.asset_enrichment import enrich_output_with_assets
 from comfy_api.internal import _ComfyNodeInternal, _NodeOutputInternal, first_real_override, is_class, make_locked_method_func
 from comfy_api.latest import io, _io
 from comfy_execution.cache_provider import _has_cache_providers, _get_cache_providers, _logger as _cache_logger
+
+
+def _profile_record(name):
+    if getattr(args, "profile_output", None):
+        return torch.profiler.record_function(name)
+    return contextlib.nullcontext()
+
+
+def _profile_output_path(value):
+    """Normalize a CLI/Desktop path and return a concrete trace filename."""
+    path = os.path.expanduser(str(value).strip())
+    # Desktop launch configurations sometimes preserve the quote used for
+    # whitespace-containing Windows paths. Remove only matching outer quotes.
+    if len(path) >= 2 and path[0] == path[-1] and path[0] in ('"', "'"):
+        path = path[1:-1].strip()
+    elif path.endswith(('"', "'")):
+        path = path[:-1].rstrip()
+
+    if not path:
+        raise ValueError("--profile-output must not be empty")
+
+    # Accept either a filename or a directory. A path without a JSON suffix is
+    # treated as a directory, which is convenient for Desktop launch options.
+    if path.endswith((os.sep, os.altsep or "\\")) or not os.path.splitext(path)[1]:
+        os.makedirs(path, exist_ok=True)
+        path = os.path.join(path, "comfyui-profile.json")
+    else:
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    return path
 
 
 class ExecutionResult(Enum):
@@ -292,7 +323,10 @@ async def _async_map_node_over_list(prompt_id, unique_id, obj, input_data_all, f
             if inspect.iscoroutinefunction(f):
                 async def async_wrapper(f, prompt_id, unique_id, list_index, args):
                     with CurrentNodeContext(prompt_id, unique_id, list_index):
-                        return await f(**args)
+                        with _profile_record(
+                            f"ComfyUI::{unique_id}::{type(obj).__name__}::{func}[{list_index}]"
+                        ):
+                            return await f(**args)
                 task = asyncio.create_task(async_wrapper(f, prompt_id, unique_id, index, args=inputs))
                 # Give the task a chance to execute without yielding
                 await asyncio.sleep(0)
@@ -303,7 +337,10 @@ async def _async_map_node_over_list(prompt_id, unique_id, obj, input_data_all, f
                     results.append(task)
             else:
                 with CurrentNodeContext(prompt_id, unique_id, index):
-                    result = f(**inputs)
+                    with _profile_record(
+                        f"ComfyUI::{unique_id}::{type(obj).__name__}::{func}[{index}]"
+                    ):
+                        result = f(**inputs)
                 results.append(result)
         else:
             results.append(execution_block)
@@ -725,7 +762,32 @@ class PromptExecutor:
                 _cache_logger.warning(f"Cache provider {provider.__class__.__name__} error on {event}: {e}")
 
     def execute(self, prompt, prompt_id, extra_data={}, execute_outputs=[]):
-        asyncio.run(self.execute_async(prompt, prompt_id, extra_data, execute_outputs))
+        profiler = None
+        profile_output = getattr(args, "profile_output", None)
+        if profile_output:
+            profile_output = _profile_output_path(profile_output)
+            profiler = torch.profiler.profile(
+                activities=[
+                    torch.profiler.ProfilerActivity.CPU,
+                    *([torch.profiler.ProfilerActivity.CUDA] if torch.cuda.is_available() else []),
+                ],
+                record_shapes=True,
+                profile_memory=True,
+                with_stack=False,
+            )
+            profiler.__enter__()
+        try:
+            asyncio.run(self.execute_async(prompt, prompt_id, extra_data, execute_outputs))
+        finally:
+            if profiler is not None:
+                try:
+                    profiler.__exit__(*sys.exc_info())
+                    profiler.export_chrome_trace(profile_output)
+                    logging.info("PyTorch profile exported to %s", profile_output)
+                except Exception:
+                    logging.exception("Failed to export PyTorch profile to %s", profile_output)
+                finally:
+                    args.profile_output = None
 
     async def execute_async(self, prompt, prompt_id, extra_data={}, execute_outputs=[]):
         set_preview_method(extra_data.get("preview_method"))
