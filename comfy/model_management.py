@@ -210,7 +210,7 @@ def get_torch_device():
         elif is_mlu():
             return torch.device("mlu", torch.mlu.current_device())
         else:
-            return torch.device(torch.cuda.current_device())
+            return torch.device(torch.musa.current_device())
 
 def get_all_torch_devices(exclude_current=False):
     global cpu_state
@@ -344,9 +344,9 @@ def get_total_memory(dev=None, torch_total_too=False):
             mem_total_torch = mem_reserved
             mem_total = mem_total_mlu
         else:
-            stats = torch.cuda.memory_stats(dev)
+            stats = torch.musa.memory_stats(dev)
             mem_reserved = stats['reserved_bytes.all.current']
-            _, mem_total_cuda = torch.cuda.mem_get_info(dev)
+            _, mem_total_cuda = torch.musa.mem_get_info(dev)
             mem_total_torch = mem_reserved
             mem_total = mem_total_cuda
 
@@ -1784,10 +1784,10 @@ def get_free_memory(dev=None, torch_free_too=False):
             mem_free_torch = mem_reserved - mem_active
             mem_free_total = mem_free_mlu + mem_free_torch
         else:
-            stats = torch.cuda.memory_stats(dev)
+            stats = torch.musa.memory_stats(dev)
             mem_active = stats['active_bytes.all.current']
             mem_reserved = stats['reserved_bytes.all.current']
-            mem_free_cuda, _ = torch.cuda.mem_get_info(dev)
+            mem_free_cuda, _ = torch.musa.mem_get_info(dev)
             mem_free_torch = mem_reserved - mem_active
             mem_free_total = mem_free_cuda + mem_free_torch
 
