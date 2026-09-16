@@ -1871,7 +1871,10 @@ def should_use_fp16(device=None, model_params=0, prioritize_performance=True, ma
     if torch.version.hip:
         return True
 
-    props = torch.cuda.get_device_properties(device)
+    props = torch.musa.get_device_properties(device)
+    # # M1000  major=2, just return true for now, it seems to work fine with fp16
+    # return True
+
     if props.major >= 8:
         return True
 
@@ -1929,6 +1932,9 @@ def should_use_bf16(device=None, model_params=0, prioritize_performance=True, ma
         return True
 
     if is_ixuca():
+        return True
+
+    if hasattr(torch, "musa") and torch.musa.is_available():
         return True
 
     if is_amd():
