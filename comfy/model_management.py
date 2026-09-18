@@ -178,6 +178,13 @@ def is_mlu():
         return True
     return False
 
+def is_musa():
+    global cpu_state
+    if cpu_state == CPUState.GPU:
+        if hasattr(torch, "musa") and torch.musa.is_available():
+            return True
+    return False
+
 def is_ixuca():
     global ixuca_available
     if ixuca_available:
@@ -1866,6 +1873,9 @@ def should_use_fp16(device=None, model_params=0, prioritize_performance=True, ma
         return True
 
     if is_ixuca():
+        return True
+
+    if is_musa():
         return True
 
     if torch.version.hip:
