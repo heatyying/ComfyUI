@@ -766,11 +766,13 @@ class PromptExecutor:
         profile_output = getattr(args, "profile_output", None)
         if profile_output:
             profile_output = _profile_output_path(profile_output)
+            activities = [torch.profiler.ProfilerActivity.CPU]
+            if hasattr(torch, "musa") and torch.musa.is_available():
+                activities.append(torch.profiler.ProfilerActivity.PrivateUse1)
+            elif torch.cuda.is_available():
+                activities.append(torch.profiler.ProfilerActivity.CUDA)
             profiler = torch.profiler.profile(
-                activities=[
-                    torch.profiler.ProfilerActivity.CPU,
-                    *([torch.profiler.ProfilerActivity.CUDA] if torch.cuda.is_available() else []),
-                ],
+                activities=activities,
                 record_shapes=True,
                 profile_memory=True,
                 with_stack=False,
