@@ -1368,6 +1368,8 @@ def current_stream(device):
         return None
     if is_device_cuda(device):
         return torch.cuda.current_stream()
+    if is_device_musa(device):
+        return torch.musa.current_stream()
     elif is_device_xpu(device):
         return torch.xpu.current_stream()
     else:
@@ -1487,6 +1489,16 @@ def get_offload_stream(device):
         for k in range(NUM_STREAMS):
             s1 = torch.cuda.Stream(device=device, priority=0)
             s1.as_context = torch.cuda.stream
+            ss.append(s1)
+        STREAMS[device] = ss
+        s = ss[stream_counter]
+        stream_counters[device] = stream_counter
+        return s
+    elif is_device_musa(device):
+        ss = []
+        for k in range(NUM_STREAMS):
+            s1 = torch.musa.Stream(device=device, priority=0)
+            s1.as_context = torch.musa.stream
             ss.append(s1)
         STREAMS[device] = ss
         s = ss[stream_counter]
@@ -1829,12 +1841,17 @@ def is_device_xpu(device):
 def is_device_cuda(device):
     return is_device_type(device, 'cuda')
 
+def is_device_musa(device):
+    return is_device_type(device, 'musa')
+
 def set_torch_device(device):
     """Set the current device for the given torch device. Supports CUDA and XPU."""
     if is_device_cuda(device):
         torch.cuda.set_device(device)
     elif is_device_xpu(device):
         torch.xpu.set_device(device)
+    elif is_device_musa(device):
+        torch.musa.set_device(device)
 
 def is_directml_enabled():
     global directml_enabled

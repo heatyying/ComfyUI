@@ -775,7 +775,7 @@ class PromptExecutor:
                 activities=activities,
                 record_shapes=True,
                 profile_memory=True,
-                with_stack=False,
+                with_stack=True,
             )
             profiler.__enter__()
         try:
