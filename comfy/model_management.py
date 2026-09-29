@@ -1813,11 +1813,18 @@ def get_free_memory(dev=None, torch_free_too=False):
             mem_free_mlu, _ = torch.mlu.mem_get_info(dev)
             mem_free_torch = mem_reserved - mem_active
             mem_free_total = mem_free_mlu + mem_free_torch
-        else:
+        elif is_musa():
             stats = torch.musa.memory_stats(dev)
             mem_active = stats['active_bytes.all.current']
             mem_reserved = stats['reserved_bytes.all.current']
-            mem_free_cuda, _ = torch.musa.mem_get_info(dev)
+            mem_free_musa, _ = torch.musa.mem_get_info(dev)
+            mem_free_torch = mem_reserved - mem_active
+            mem_free_total = mem_free_musa + mem_free_torch
+        else:
+            stats = torch.cuda.memory_stats(dev)
+            mem_active = stats['active_bytes.all.current']
+            mem_reserved = stats['reserved_bytes.all.current']
+            mem_free_cuda, _ = torch.cuda.mem_get_info(dev)
             mem_free_torch = mem_reserved - mem_active
             mem_free_total = mem_free_cuda + mem_free_torch
 
@@ -1972,7 +1979,7 @@ def should_use_bf16(device=None, model_params=0, prioritize_performance=True, ma
     if is_ixuca():
         return True
 
-    if hasattr(torch, "musa") and torch.musa.is_available():
+    if is_musa():
         return True
 
     if is_amd():
