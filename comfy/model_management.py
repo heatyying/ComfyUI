@@ -216,8 +216,10 @@ def get_torch_device():
             return torch.device("npu", torch.npu.current_device())
         elif is_mlu():
             return torch.device("mlu", torch.mlu.current_device())
+        elif is_musa():
+            return torch.device("musa", torch.musa.current_device())
         else:
-            return torch.device(torch.musa.current_device())
+            return torch.device(torch.cuda.current_device())
 
 def get_all_torch_devices(exclude_current=False):
     global cpu_state
@@ -238,6 +240,9 @@ def get_all_torch_devices(exclude_current=False):
         elif is_mlu():
             for i in range(torch.mlu.device_count()):
                 devices.append(torch.device("mlu", i))
+        elif is_musa():
+            for i in range(torch.musa.device_count()):
+                devices.append(torch.device("musa", i))
         else:
             # Fallback for unhandled GPU backends (e.g. DirectML): at least
             # report the current device so callers like unload_all_models()
