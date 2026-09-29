@@ -355,10 +355,16 @@ def get_total_memory(dev=None, torch_total_too=False):
             _, mem_total_mlu = torch.mlu.mem_get_info(dev)
             mem_total_torch = mem_reserved
             mem_total = mem_total_mlu
-        else:
+        elif is_musa():
             stats = torch.musa.memory_stats(dev)
             mem_reserved = stats['reserved_bytes.all.current']
-            _, mem_total_cuda = torch.musa.mem_get_info(dev)
+            _, mem_total_musa = torch.musa.mem_get_info(dev)
+            mem_total_torch = mem_reserved
+            mem_total = mem_total_musa
+        else:
+            stats = torch.cuda.memory_stats(dev)
+            mem_reserved = stats['reserved_bytes.all.current']
+            _, mem_total_cuda = torch.cuda.mem_get_info(dev)
             mem_total_torch = mem_reserved
             mem_total = mem_total_cuda
 
