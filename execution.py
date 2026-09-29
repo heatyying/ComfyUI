@@ -80,6 +80,13 @@ def _profile_output_path(value):
     return path
 
 
+def _profile_trace_path(path, index):
+    if index == 0:
+        return path
+    stem, suffix = os.path.splitext(path)
+    return f"{stem}-{index}{suffix}"
+
+
 class ExecutionResult(Enum):
     SUCCESS = 0
     FAILURE = 1
@@ -704,6 +711,7 @@ class PromptExecutor:
         self.cache_type = cache_type
         self.server = server
         self.prompt_model_tracker = comfy.model_patcher.PromptModelTracker()
+        self.profile_index = 0
         self.reset()
 
     def reset(self):
@@ -765,7 +773,7 @@ class PromptExecutor:
         profiler = None
         profile_output = getattr(args, "profile_output", None)
         if profile_output:
-            profile_output = _profile_output_path(profile_output)
+            profile_output = _profile_trace_path(_profile_output_path(profile_output), self.profile_index)
             activities = [torch.profiler.ProfilerActivity.CPU]
             if hasattr(torch, "musa") and torch.musa.is_available():
                 activities.append(torch.profiler.ProfilerActivity.PrivateUse1)
@@ -778,6 +786,7 @@ class PromptExecutor:
                 with_stack=True,
             )
             profiler.__enter__()
+            self.profile_index += 1
         try:
             asyncio.run(self.execute_async(prompt, prompt_id, extra_data, execute_outputs))
         finally:
@@ -789,7 +798,8 @@ class PromptExecutor:
                 except Exception:
                     logging.exception("Failed to export PyTorch profile to %s", profile_output)
                 finally:
-                    args.profile_output = None
+                    if args.profile_count > 0 and self.profile_index >= args.profile_count:
+                        args.profile_output = None
 
     async def execute_async(self, prompt, prompt_id, extra_data={}, execute_outputs=[]):
         set_preview_method(extra_data.get("preview_method"))
