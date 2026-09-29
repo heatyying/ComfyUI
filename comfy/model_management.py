@@ -1916,9 +1916,7 @@ def should_use_fp16(device=None, model_params=0, prioritize_performance=True, ma
     if torch.version.hip:
         return True
 
-    props = torch.musa.get_device_properties(device)
-    # # M1000  major=2, just return true for now, it seems to work fine with fp16
-    # return True
+    props = torch.cuda.get_device_properties(device)
 
     if props.major >= 8:
         return True
